@@ -1,0 +1,1739 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>플라스틱섬 청소대작전</title>
+<style>
+@font-face{font-family:'NexonMaplestory';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@2.1/MaplestoryOTFBold.woff') format('woff');font-weight:700;font-display:swap;}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#111}
+body{font-family:'NexonMaplestory','맑은 고딕',sans-serif;display:flex;align-items:center;justify-content:center}
+#app{width:100vw;height:100vh;position:relative;overflow:hidden;background:#0d4f8c}
+/* z-index 1: 섬/하늘 배경 */
+#bgCanvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+/* z-index 2: 나만 보이는 카메라 (segmentation) */
+#segCanvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none}
+/* z-index 3: 게임 오브젝트 (투명 배경) */
+#gameCanvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:3;cursor:none;background:transparent}
+
+/* HUD */
+#hud{position:absolute;top:0;left:0;width:100%;padding:14px 20px;display:none;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.4);z-index:15;pointer-events:none}
+#timerDisplay{font-size:clamp(32px,6.2vw,52px);color:#fff;text-shadow:2px 2px 0 #000;font-family:'NexonMaplestory',sans-serif}
+#timerDisplay.urgent{color:#ff4444;animation:pulse 0.5s ease-in-out infinite alternate}
+@keyframes pulse{from{transform:scale(1)}to{transform:scale(1.15)}}
+#scoreDisplay{font-size:clamp(26px,5vw,42px);color:#ffe082;text-shadow:2px 2px 0 #000;font-family:'NexonMaplestory',sans-serif}
+
+/* 시작 화면 */
+#startScreen{position:absolute;top:0;left:0;width:100%;height:100%;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,#1a62a8 0%,#2882c0 45%,#3a9e82 100%)}
+.wave-deco{position:absolute;bottom:0;left:0;width:100%;height:80px;background:linear-gradient(transparent,rgba(0,100,150,0.5))}
+.title-main{font-size:clamp(28px,6vw,50px);color:#fff;text-align:center;text-shadow:4px 4px 0 #0a3d6b,2px 2px 8px rgba(0,0,0,0.5);line-height:1.25;margin-bottom:6px}
+.title-emoji{height:clamp(70px,10vw,110px);width:auto;margin-bottom:14px;border-radius:14px;filter:drop-shadow(3px 3px 8px rgba(0,0,0,0.5))}
+.title-main{font-size:clamp(56px,12vw,100px);color:#fff;text-align:center;text-shadow:4px 4px 0 #0a3d6b,2px 2px 8px rgba(0,0,0,0.5);line-height:1.2;margin-bottom:8px}
+.subtitle{font-size:clamp(35px,5vw,50px);color:#ffe082;text-align:center;margin-bottom:22px;text-shadow:1px 1px 3px #0a3d6b}
+.desc-box{background:rgba(255,255,255,0.18);border-radius:20px;padding:22px 42px;margin-bottom:28px;width:90%;max-width:min(900px,92vw);text-align:center;color:#fff;font-size:clamp(32px,3.8vw,42px);line-height:1.85;border:2px solid rgba(255,255,255,0.35);backdrop-filter:blur(4px)}
+.desc-box strong{color:#ffe082}
+.score-plus{color:#4fd87a;font-weight:900;font-size:1.25em;-webkit-text-stroke:1.5px rgba(0,60,20,0.7);text-shadow:2px 2px 6px rgba(0,0,0,0.6)}
+.score-minus{color:#ff6060;font-weight:900;font-size:1.25em;-webkit-text-stroke:1.5px rgba(100,0,0,0.7);text-shadow:2px 2px 6px rgba(0,0,0,0.6)}
+.cam-notice{margin-top:14px;color:rgba(255,255,255,0.65);font-size:clamp(26px,3vw,34px)}
+.start-btn{background:linear-gradient(135deg,#ff6b35,#ff8e53);color:#fff;border:4px solid rgba(255,255,255,0.5);border-radius:60px;padding:29px 90px;font-size:clamp(32px,7.2vw,51px);font-family:'NexonMaplestory',sans-serif;cursor:pointer;box-shadow:0 8px 25px rgba(255,107,53,0.6),0 0 0 0 rgba(255,107,53,0.4);transition:all 0.2s;animation:btnGlow 2s ease-in-out infinite}
+@keyframes btnGlow{0%,100%{box-shadow:0 8px 25px rgba(255,107,53,0.6),0 0 0 0 rgba(255,107,53,0)}50%{box-shadow:0 8px 30px rgba(255,107,53,0.8),0 0 0 12px rgba(255,107,53,0.1)}}
+.start-btn:hover{transform:scale(1.06)}
+.cam-notice{margin-top:14px;color:rgba(255,255,255,0.65);font-size:13px}
+
+/* 카운트다운 */
+#countdownOverlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:22;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.45)}
+.countdown-num{font-size:clamp(100px,25vw,180px);color:#fff;text-shadow:6px 6px 0 #000;font-family:'NexonMaplestory',sans-serif}
+.cd-anim{animation:cdPop 0.85s cubic-bezier(0.175,0.885,0.32,1.275)}
+@keyframes cdPop{0%{transform:scale(2.2);opacity:0}60%{transform:scale(0.95);opacity:1}100%{transform:scale(1);opacity:1}}
+
+/* 결과 화면 */
+#resultScreen{position:absolute;top:0;left:0;width:100%;height:100%;z-index:25;display:none;flex-direction:column;align-items:center;justify-content:flex-start;pointer-events:none}
+.result-bg{position:absolute;top:0;left:0;width:100%;height:100%;z-index:-1}
+.result-card{background:linear-gradient(135deg,rgba(0,190,220,0.92),rgba(0,130,200,0.92));border-radius:20px;padding:6px 24px 10px;text-align:center;border:2px solid rgba(255,255,255,0.55);backdrop-filter:blur(8px);width:52%;margin:1vh auto 0;pointer-events:auto;box-shadow:0 6px 24px rgba(0,0,0,0.35),0 0 0 3px rgba(255,255,255,0.15)}
+.result-top-row{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.result-title{font-size:clamp(29px,6.4vw,44px);color:#fff;text-shadow:2px 2px 0 #000;margin:0;line-height:1.2}
+.stars-row{font-size:clamp(33px,7.3vw,51px);letter-spacing:3px;margin:0}
+.result-score{font-size:clamp(47px,10.9vw,73px);color:#ffe082;text-shadow:2px 2px 0 #c8820a;line-height:1;margin:0}
+.result-detail{font-size:clamp(22px,4vw,27px);color:rgba(255,255,255,0.8);margin:0}
+.result-msg{font-size:clamp(23px,4.6vw,29px);color:#ffe082;line-height:1.4;white-space:pre-line;margin:4px 0 0}
+.retry-btn{background:linear-gradient(135deg,#43a047,#66bb6a);color:#fff;border:2px solid rgba(255,255,255,0.4);border-radius:50px;padding:14px 51px;font-size:clamp(26px,5.5vw,33px);font-family:'NexonMaplestory',sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.4);transition:all 0.2s;margin-top:6px}
+.retry-btn:hover{transform:scale(1.05)}
+
+/* 카메라 원본 - 숨김 (segmentation 소스용) */
+#camView{position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;pointer-events:none}
+#camStatus{position:absolute;bottom:12px;left:12px;background:rgba(0,0,0,0.5);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;z-index:16;display:none;font-family:'NexonMaplestory',sans-serif}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="bgCanvas"></canvas>
+  <canvas id="segCanvas"></canvas>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- 시작 화면 -->
+  <div id="startScreen">
+    <div class="title-main">플라스틱섬 청소대작전!</div>
+    <div class="subtitle">🌳 플라스틱섬을 깨끗하게 만들어요! 🌴</div>
+    <div class="desc-box">
+      손을 뻗어 <strong>쓰레기</strong>를 치워요!<br>
+      <img src="KakaoTalk_Photo_2026-06-02-22-10-48.png" style="height:1em;vertical-align:middle"> 쓰레기를 치울 때마다 <span class="score-plus">+10</span>점<br>
+      🌊 쓰레기가 바다에 빠지면 <span class="score-minus">-10</span>점<br>
+      <img src="KakaoTalk_Photo_2026-06-02-21-48-35.png" style="height:1em;vertical-align:middle"> 바다생물을 건드리면 <span class="score-minus">-1</span>점<br>
+      ⏰ 40초 안에 쓰레기를 최대한 없애세요!
+    </div>
+    <button class="start-btn" onclick="startGame()">게임 시작!</button>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="timerDisplay">⏰ 40</div>
+    <div id="scoreDisplay">점수: 0</div>
+  </div>
+
+  <!-- 카운트다운 -->
+  <div id="countdownOverlay">
+    <div class="countdown-num" id="countdownNum">3</div>
+  </div>
+
+  <!-- 결과 화면 -->
+  <div id="resultScreen">
+    <canvas class="result-bg" id="resultBgCanvas"></canvas>
+    <div class="result-card">
+      <div class="result-top-row">
+        <div class="stars-row" id="starsRow">⭐⭐⭐</div>
+        <div class="result-score" id="resultScore">100점</div>
+        <div class="result-title" id="resultTitle">🎉 완벽해요!</div>
+      </div>
+      <div class="result-detail" id="resultDetail">쓰레기 10개 / 10개 제거!</div>
+      <div class="result-msg" id="resultMsg">섬이 깨끗해졌어요!</div>
+      <button class="retry-btn" onclick="goHome()">🔄 다시 도전하기</button>
+    </div>
+  </div>
+
+  <video id="camView" autoplay playsinline muted></video>
+  <canvas id="segCanvas"></canvas>
+  <div id="camStatus">📷 카메라 연결 중...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1632090166/camera_utils.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js" crossorigin="anonymous"></script>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+const segCanvas = document.getElementById('segCanvas');
+const segCtx = segCanvas.getContext('2d');
+const appEl = document.getElementById('app');
+let W, H;
+
+/* ===================== SOUND (Web Audio API) ===================== */
+let audioCtx = null;
+let waveGain = null;
+let seagullTimer = null;
+let bgmNodes = [];   // BGM 노드들 (정지용)
+let bgmGain = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // ── 파도 소리 (화이트노이즈 + 필터)
+  const bufSize = audioCtx.sampleRate * 4;
+  const buffer = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const waveSource = audioCtx.createBufferSource();
+  waveSource.buffer = buffer; waveSource.loop = true;
+  const lowpass = audioCtx.createBiquadFilter();
+  lowpass.type = 'lowpass'; lowpass.frequency.value = 350; lowpass.Q.value = 0.7;
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.frequency.value = 0.15; lfoGain.gain.value = 0.2;
+  lfo.connect(lfoGain);
+  waveGain = audioCtx.createGain(); waveGain.gain.value = 0.1;
+  lfoGain.connect(waveGain.gain);
+  waveSource.connect(lowpass); lowpass.connect(waveGain); waveGain.connect(audioCtx.destination);
+  waveSource.start(); lfo.start();
+  bgmNodes.push(waveSource, lfo);
+
+  // ── BGM 시작
+  startBGM();
+
+  // ── 갈매기 소리
+  scheduleSeagull();
+}
+
+// ── BGM: 신나는 바다 칼림바+마림바 멜로디 ──
+function startBGM() {
+  if (!audioCtx) return;
+  bgmGain = audioCtx.createGain();
+  bgmGain.gain.value = 0;
+  bgmGain.connect(audioCtx.destination);
+  // 페이드인
+  bgmGain.gain.linearRampToValueAtTime(0.32, audioCtx.currentTime + 2);
+
+  // 음계: C장조 (도레미파솔라시도) 주파수
+  const notes = {
+    C4:261.63, D4:293.66, E4:329.63, F4:349.23,
+    G4:392.00, A4:440.00, B4:493.88,
+    C5:523.25, D5:587.33, E5:659.25, G5:783.99,
+    A3:220.00, G3:196.00, F3:174.61, E3:164.81, C3:130.81
+  };
+
+  // 신나는 바다 멜로디 패턴 (박자: 0.22초 단위)
+  const melody = [
+    // 마디 1: 밝고 신나는 오르막
+    {n:'C5',t:0,d:0.4},{n:'E5',t:0.22,d:0.3},{n:'G5',t:0.44,d:0.4},{n:'E5',t:0.66,d:0.3},
+    {n:'C5',t:0.88,d:0.4},{n:'D5',t:1.1,d:0.3},{n:'E5',t:1.32,d:0.5},
+    // 마디 2
+    {n:'G4',t:1.76,d:0.4},{n:'A4',t:1.98,d:0.3},{n:'C5',t:2.2,d:0.5},{n:'A4',t:2.64,d:0.3},
+    {n:'G4',t:2.86,d:0.4},{n:'F4',t:3.08,d:0.3},{n:'G4',t:3.3,d:0.6},
+    // 마디 3: 점프!
+    {n:'C5',t:3.96,d:0.2},{n:'C5',t:4.18,d:0.2},{n:'E5',t:4.4,d:0.4},{n:'G5',t:4.62,d:0.5},
+    {n:'E5',t:5.06,d:0.3},{n:'D5',t:5.28,d:0.3},{n:'C5',t:5.5,d:0.6},
+    // 마디 4: 내려오며 마무리
+    {n:'A4',t:6.16,d:0.3},{n:'G4',t:6.38,d:0.3},{n:'F4',t:6.6,d:0.3},{n:'E4',t:6.82,d:0.3},
+    {n:'D4',t:7.04,d:0.3},{n:'C4',t:7.26,d:0.8},
+  ];
+  const LOOP = 7.92; // 전체 루프 길이(초)
+
+  // 베이스 패턴
+  const bass = [
+    {n:'C3',t:0,d:0.35},{n:'G3',t:0.44,d:0.3},{n:'C3',t:0.88,d:0.35},{n:'G3',t:1.32,d:0.3},
+    {n:'F3',t:1.76,d:0.35},{n:'C3',t:2.2,d:0.3},{n:'G3',t:2.64,d:0.35},{n:'F3',t:3.08,d:0.3},
+    {n:'C3',t:3.96,d:0.35},{n:'G3',t:4.4,d:0.3},{n:'C3',t:4.84,d:0.35},{n:'G3',t:5.28,d:0.3},
+    {n:'A3',t:6.16,d:0.35},{n:'F3',t:6.6,d:0.3},{n:'E3',t:7.04,d:0.35},{n:'C3',t:7.48,d:0.3},
+  ];
+
+  function playNote(freq, startT, dur, vol, type='sine', harmonics=false) {
+    const osc = audioCtx.createOscillator();
+    const env = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    // 칼림바 느낌: 빠른 어택, 자연스러운 감쇠
+    env.gain.setValueAtTime(0, startT);
+    env.gain.linearRampToValueAtTime(vol, startT + 0.015);
+    env.gain.exponentialRampToValueAtTime(vol * 0.4, startT + dur * 0.3);
+    env.gain.exponentialRampToValueAtTime(0.001, startT + dur);
+    osc.connect(env); env.connect(bgmGain);
+    osc.start(startT); osc.stop(startT + dur + 0.05);
+    bgmNodes.push(osc);
+
+    // 배음(overtone) - 칼림바 특유의 따뜻한 소리
+    if (harmonics) {
+      const osc2 = audioCtx.createOscillator();
+      const env2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 2;
+      env2.gain.setValueAtTime(0, startT);
+      env2.gain.linearRampToValueAtTime(vol*0.2, startT+0.01);
+      env2.gain.exponentialRampToValueAtTime(0.001, startT+dur*0.5);
+      osc2.connect(env2); env2.connect(bgmGain);
+      osc2.start(startT); osc2.stop(startT+dur);
+      bgmNodes.push(osc2);
+    }
+  }
+
+  function playPercussion(startT) {
+    // 타악기: 하이햇 (짧은 노이즈)
+    const hatBuf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.05, audioCtx.sampleRate);
+    const hatData = hatBuf.getChannelData(0);
+    for(let i=0;i<hatData.length;i++) hatData[i]=Math.random()*2-1;
+    const beats = [0, 0.22, 0.44, 0.66, 0.88, 1.1, 1.32, 1.54];
+    beats.forEach(b => {
+      const src = audioCtx.createBufferSource();
+      src.buffer = hatBuf;
+      const hp = audioCtx.createBiquadFilter();
+      hp.type='highpass'; hp.frequency.value=6000;
+      const g = audioCtx.createGain(); g.gain.value=0.04;
+      src.connect(hp); hp.connect(g); g.connect(bgmGain);
+      src.start(startT+b);
+      bgmNodes.push(src);
+    });
+    // 킥드럼 (저음 펄스)
+    [0, 0.88, 1.76, 2.64, 3.52, 4.4, 5.28, 6.16, 7.04].forEach(b => {
+      const kick = audioCtx.createOscillator();
+      const kg = audioCtx.createGain();
+      kick.frequency.setValueAtTime(120, startT+b);
+      kick.frequency.exponentialRampToValueAtTime(40, startT+b+0.15);
+      kg.gain.setValueAtTime(0.18, startT+b);
+      kg.gain.exponentialRampToValueAtTime(0.001, startT+b+0.2);
+      kick.connect(kg); kg.connect(bgmGain);
+      kick.start(startT+b); kick.stop(startT+b+0.25);
+      bgmNodes.push(kick);
+    });
+  }
+
+  // 루프 스케줄러
+  let loopStart = audioCtx.currentTime + 0.1;
+  function scheduleLoop(startT) {
+    melody.forEach(n => playNote(notes[n.n], startT+n.t, n.d, 0.22, 'sine', true));
+    bass.forEach(n => playNote(notes[n.n], startT+n.t, n.d, 0.14, 'triangle', false));
+    playPercussion(startT);
+    bgmNodes.push(setTimeout(() => {
+      if (audioCtx && gameState === 'playing') scheduleLoop(startT + LOOP);
+    }, (startT + LOOP - audioCtx.currentTime - 0.5) * 1000));
+  }
+  scheduleLoop(loopStart);
+}
+
+function scheduleSeagull() {
+  const delay = 5000 + Math.random() * 9000;
+  seagullTimer = setTimeout(() => {
+    if (audioCtx && gameState === 'playing') playSeagullCry();
+    scheduleSeagull();
+  }, delay);
+}
+
+function playSeagullCry() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+
+  // 3가지 갈매기 울음 패턴 중 랜덤 선택
+  const patterns = [
+    // 패턴1: 끼이이 — 올라갔다 내려오는 전형적 갈매기
+    [
+      {start:0.00, end:0.28, f1: 780, f2:1150, vol:0.13},
+      {start:0.32, end:0.58, f1:1050, f2: 680, vol:0.11},
+      {start:0.65, end:0.88, f1: 850, f2:1250, vol:0.09},
+    ],
+    // 패턴2: 끼약끼약 — 짧고 날카로운 2연속
+    [
+      {start:0.00, end:0.20, f1: 900, f2:1350, vol:0.14},
+      {start:0.30, end:0.50, f1:1200, f2: 780, vol:0.11},
+    ],
+    // 패턴3: 긴 울음 + 짧은 여운
+    [
+      {start:0.00, end:0.45, f1: 720, f2:1100, vol:0.13},
+      {start:0.55, end:0.68, f1: 980, f2: 730, vol:0.09},
+      {start:0.76, end:0.86, f1: 840, f2:1180, vol:0.07},
+    ],
+  ];
+
+  const calls = patterns[Math.floor(Math.random() * patterns.length)];
+  calls.forEach(call => {
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    const vib = audioCtx.createOscillator();
+    const vibG = audioCtx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(call.f1, t + call.start);
+    osc.frequency.exponentialRampToValueAtTime(call.f2, t + call.end);
+
+    vib.frequency.value = 9 + Math.random() * 4;  // 갈매기 떨림 8~13Hz
+    vibG.gain.value = 35;
+    vib.connect(vibG); vibG.connect(osc.frequency);
+
+    g.gain.setValueAtTime(0, t + call.start);
+    g.gain.linearRampToValueAtTime(call.vol, t + call.start + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.001, t + call.end);
+
+    // 갈매기 음색: 밴드패스로 1kHz 대역 강조
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 950; bp.Q.value = 1.8;
+
+    osc.connect(bp); bp.connect(g); g.connect(audioCtx.destination);
+    osc.start(t + call.start); vib.start(t + call.start);
+    osc.stop(t + call.end + 0.06); vib.stop(t + call.end + 0.06);
+  });
+}
+
+function stopAudio() {
+  if (bgmGain) bgmGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.8);
+  if (waveGain) waveGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+  if (seagullTimer) clearTimeout(seagullTimer);
+}
+
+// 3번: 쓰레기 처리 효과음 - 가볍고 산뜻한 '퐁!' 사운드
+let popCount = 0;
+function playPopSound() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  // 음정 살짝씩 올라가며 변화 (10개마다 리셋)
+  const semitone = (popCount % 8) * 1.5;
+  const baseFreq = 520 * Math.pow(2, semitone/12);
+  popCount++;
+
+  // 메인 '퐁' (짧은 정현파)
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(baseFreq, t);
+  osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.6, t + 0.12);
+  env.gain.setValueAtTime(0.18, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  osc.connect(env); env.connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + 0.18);
+
+  // 짧은 고음 '핑' (반짝임 느낌)
+  const osc2 = audioCtx.createOscillator();
+  const env2 = audioCtx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.value = baseFreq * 2.5;
+  env2.gain.setValueAtTime(0.07, t);
+  env2.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  osc2.connect(env2); env2.connect(audioCtx.destination);
+  osc2.start(t); osc2.stop(t + 0.1);
+}
+
+// ── 쓰레기 바닥 착지 효과음 (뿅망치: 고음→저음 피치 슬라이드) ──
+function playThudSound() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  // 뿅! 피치 슬라이드 (square파 - 만화적 느낌)
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(900, t);
+  osc.frequency.exponentialRampToValueAtTime(70, t + 0.22);
+  env.gain.setValueAtTime(0.28, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  osc.connect(env); env.connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + 0.30);
+  // 두 번째 레이어 (triangle - 더 귀여운 하모닉)
+  const osc2 = audioCtx.createOscillator();
+  const env2 = audioCtx.createGain();
+  osc2.type = 'triangle';
+  osc2.frequency.setValueAtTime(1400, t);
+  osc2.frequency.exponentialRampToValueAtTime(150, t + 0.16);
+  env2.gain.setValueAtTime(0.18, t);
+  env2.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  osc2.connect(env2); env2.connect(audioCtx.destination);
+  osc2.start(t); osc2.stop(t + 0.20);
+  // 짧은 타격 노이즈
+  const bufSize = Math.floor(audioCtx.sampleRate * 0.06);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random()*2-1) * Math.pow(1 - i/bufSize, 2);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 2000; bp.Q.value = 2;
+  const g = audioCtx.createGain(); g.gain.value = 0.14;
+  src.connect(bp); bp.connect(g); g.connect(audioCtx.destination);
+  src.start(t);
+}
+
+
+function resize() {
+  W = canvas.width = appEl.clientWidth;
+  H = canvas.height = appEl.clientHeight;
+  bgCanvas.width = appEl.clientWidth;
+  bgCanvas.height = appEl.clientHeight;
+  segCanvas.width = appEl.clientWidth;
+  segCanvas.height = appEl.clientHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); if (gameState === 'playing') spawnItems(); });
+
+let gameState = 'start';
+let score = 0;
+let timeLeft = 40;
+let timerInterval = null;
+let removedCount = 0;
+let totalTrash = 180;
+let items = [];
+let scorePopups = [];
+let fingerPoints = []; // [{x,y}] - 양손 모든 검지 위치
+let cleanProgress = 0;
+let gameStartTimestamp = 0;
+let lastTouchMap = {};
+let animFrame = null;
+let confettiParticles = [];
+let dustParticles = [];
+let trashQueue = [];
+let trashSpawnTimer = null;
+let spawnedTrashCount = 0;
+
+
+// ── 동물 이미지 로딩 및 배경 제거 ──
+const animalImgData = {};
+
+function processAnimalImage(img) {
+  const ow = img.naturalWidth, oh = img.naturalHeight;
+  const off = document.createElement('canvas');
+  off.width = ow; off.height = oh;
+  const oc = off.getContext('2d');
+  oc.drawImage(img, 0, 0);
+  try {
+    const corner = oc.getImageData(0, 0, 4, 4).data;
+    const r = corner[0], g = corner[1], b = corner[2], a = corner[3];
+    if (a === 0) return off;
+    const isWhite = r > 235 && g > 235 && b > 235;
+    const isDark  = r < 25  && g < 25  && b < 25;
+    if (!isWhite && !isDark) return off;
+    const imgd = oc.getImageData(0, 0, ow, oh);
+    const d = imgd.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (isWhite && d[i] > 235 && d[i+1] > 235 && d[i+2] > 235) d[i+3] = 0;
+      else if (isDark && d[i] < 25 && d[i+1] < 25 && d[i+2] < 25) d[i+3] = 0;
+    }
+    oc.putImageData(imgd, 0, 0);
+  } catch(e) {}
+  return off;
+}
+
+(function() {
+  const files = {
+    puffin:     'KakaoTalk_Photo_2026-06-02-21-30-27.png',
+    dugong:     'KakaoTalk_Photo_2026-06-02-21-48-26.png',
+    seal1:      'KakaoTalk_Photo_2026-06-02-21-48-31.png',
+    cormorant1: 'KakaoTalk_Photo_2026-06-02-21-48-33.png',
+    bird1:      'KakaoTalk_Photo_2026-06-02-21-48-35.png',
+    turtle1:    'KakaoTalk_Photo_2026-06-02-21-48-38.png',
+    kiwi:       'KakaoTalk_Photo_2026-06-02-21-48-40.png',
+    shorebird:  'KakaoTalk_Photo_2026-06-02-21-48-42.png',
+    pelican:    'KakaoTalk_Photo_2026-06-02-21-48-44.png',
+    turtle2:    'KakaoTalk_Photo_2026-06-02-21-48-47.png',
+    crab:       'KakaoTalk_Photo_2026-06-02-21-48-48.png',
+    seal2:      'KakaoTalk_Photo_2026-06-02-21-48-50.png',
+    cormorant2: 'KakaoTalk_Photo_2026-06-02-21-48-52.png',
+    netanimal:  'KakaoTalk_Photo_2026-06-02-21-48-21.png',
+  };
+  Object.entries(files).forEach(([key, src]) => {
+    const img = new Image();
+    img.onload = () => { animalImgData[key] = processAnimalImage(img); };
+    img.src = src;
+  });
+})();
+
+function makeAnimalDraw(key) {
+  return function(ctx, x, y, w, h) {
+    const img = animalImgData[key];
+    if (img) ctx.drawImage(img, x - w/2, y - h/2, w, h);
+  };
+}
+
+// ── 쓰레기 이미지 로딩 ──
+const trashImgData = {};
+
+(function() {
+  const files = {
+    garbage_bag:     'KakaoTalk_Photo_2026-06-02-22-10-46.png',
+    plastic_bag1:    'KakaoTalk_Photo_2026-06-02-22-10-48.png',
+    paper:           'KakaoTalk_Photo_2026-06-02-22-10-51.png',
+    bottle_blue:     'KakaoTalk_Photo_2026-06-02-22-10-53.png',
+    battery:         'KakaoTalk_Photo_2026-06-02-22-10-55.png',
+    bottle_green:    'KakaoTalk_Photo_2026-06-02-22-11-00.png',
+    box:             'KakaoTalk_Photo_2026-06-02-22-11-02.png',
+    coffee_cup:      'KakaoTalk_Photo_2026-06-02-22-11-04.png',
+    bolt:            'KakaoTalk_Photo_2026-06-02-22-11-06.png',
+    soda_can:        'KakaoTalk_Photo_2026-06-02-22-11-09.png',
+    banana:          'KakaoTalk_Photo_2026-06-02-22-11-11.png',
+    sausage:         'KakaoTalk_Photo_2026-06-02-22-11-13.png',
+    newspaper:       'KakaoTalk_Photo_2026-06-02-22-11-14.png',
+    watermelon:      'KakaoTalk_Photo_2026-06-02-22-11-17.png',
+    tin_can:         'KakaoTalk_Photo_2026-06-02-22-11-19.png',
+    mirror:          'KakaoTalk_Photo_2026-06-02-22-12-02.png',
+    container:       'KakaoTalk_Photo_2026-06-02-22-12-04.png',
+    bulb:            'KakaoTalk_Photo_2026-06-02-22-12-06.png',
+    bottle_white:    'KakaoTalk_Photo_2026-06-02-22-12-37.png',
+    bottle_broken:   'KakaoTalk_Photo_2026-06-02-22-12-42.png',
+    plastic_bag2:    'KakaoTalk_Photo_2026-06-02-22-12-50.png',
+  };
+  Object.entries(files).forEach(([key, src]) => {
+    const img = new Image();
+    img.onload = () => { trashImgData[key] = processAnimalImage(img); };
+    img.src = src;
+  });
+})();
+
+function makeTrashDraw(key) {
+  return function(ctx, x, y, w, h) {
+    const img = trashImgData[key];
+    if (img) ctx.drawImage(img, x - w/2, y - h/2, w, h);
+  };
+}
+
+/* ===================== ITEM DATA ===================== */
+const TRASH_TYPES = [
+  {name:'쓰레기봉투',  draw:makeTrashDraw('garbage_bag'),   w:50, h:55},
+  {name:'비닐봉지',    draw:makeTrashDraw('plastic_bag1'),  w:55, h:48},
+  {name:'종이',        draw:makeTrashDraw('paper'),         w:50, h:42},
+  {name:'페트병',      draw:makeTrashDraw('bottle_blue'),   w:62, h:36},
+  {name:'배터리',      draw:makeTrashDraw('battery'),       w:38, h:52},
+  {name:'유리병',      draw:makeTrashDraw('bottle_green'),  w:36, h:62},
+  {name:'박스',        draw:makeTrashDraw('box'),           w:52, h:48},
+  {name:'커피컵',      draw:makeTrashDraw('coffee_cup'),    w:42, h:56},
+  {name:'나사',        draw:makeTrashDraw('bolt'),          w:36, h:52},
+  {name:'소다캔',      draw:makeTrashDraw('soda_can'),      w:58, h:46},
+  {name:'바나나껍질',  draw:makeTrashDraw('banana'),        w:54, h:40},
+  {name:'소시지',      draw:makeTrashDraw('sausage'),       w:36, h:56},
+  {name:'신문지',      draw:makeTrashDraw('newspaper'),     w:54, h:52},
+  {name:'수박껍질',    draw:makeTrashDraw('watermelon'),    w:56, h:44},
+  {name:'통조림',      draw:makeTrashDraw('tin_can'),       w:38, h:52},
+  {name:'깨진거울',    draw:makeTrashDraw('mirror'),        w:50, h:58},
+  {name:'용기',        draw:makeTrashDraw('container'),     w:46, h:56},
+  {name:'전구',        draw:makeTrashDraw('bulb'),          w:44, h:56},
+  {name:'페트병2',     draw:makeTrashDraw('bottle_white'),  w:40, h:62},
+  {name:'깨진병',      draw:makeTrashDraw('bottle_broken'), w:62, h:38},
+  {name:'비닐봉지2',   draw:makeTrashDraw('plastic_bag2'),  w:52, h:50},
+];
+const ANIMAL_TYPES = [
+  {name:'퍼핀',    draw:makeAnimalDraw('puffin'),     w:120, h:102, msgs:['나 퍼핀이야!','캔이 머리에!','으앙!','만지지마!']},
+  {name:'듀공',    draw:makeAnimalDraw('dugong'),     w:144, h:72,  msgs:['타이어가 끼었어!','으아!','도와줘!','무거워!']},
+  {name:'물개',    draw:makeAnimalDraw('seal1'),      w:138, h:70,  msgs:['비닐이 감겼어!','숨막혀!','으흥!','나 쓰레기 아냐!']},
+  {name:'가마우지',draw:makeAnimalDraw('cormorant1'), w:108, h:114, msgs:['바구니가 끼었어!','끄아!','부리가 막혔어!','만지지마!']},
+  {name:'새',      draw:makeAnimalDraw('bird1'),      w:90,  h:120, msgs:['뚜껑이 걸렸어!','도와줘!','으아!','아파!']},
+  {name:'바다거북',draw:makeAnimalDraw('turtle1'),    w:126, h:78,  msgs:['등껍질에 뭔가!','으으!','무거워!','도와줘요!']},
+  {name:'키위',    draw:makeAnimalDraw('kiwi'),       w:102, h:114, msgs:['낚싯줄이!','엉켜있어!','풀어줘!','으아!']},
+  {name:'도요새',  draw:makeAnimalDraw('shorebird'),  w:90,  h:138, msgs:['비닐이 날개에!','날 수가 없어!','꺅!','도와줘!']},
+  {name:'펠리컨',  draw:makeAnimalDraw('pelican'),    w:108, h:126, msgs:['쓰레기 삼켰어!','배탈났어!','으으!','먹으면 안 돼요!']},
+  {name:'바다거북',draw:makeAnimalDraw('turtle2'),    w:132, h:82,  msgs:['과자봉지가!','등이 무거워!','도와줘요!','끙!']},
+  {name:'게',      draw:makeAnimalDraw('crab'),       w:126, h:96,  msgs:['낚싯줄 감겼어!','집게가 안 펴져!','으아!','씩씩!']},
+  {name:'바다사자',draw:makeAnimalDraw('seal2'),      w:138, h:70,  msgs:['그물에 걸렸어!','숨막혀!','나야 나!','만지지마요!']},
+  {name:'가마우지',draw:makeAnimalDraw('cormorant2'), w:96,  h:126, msgs:['실이 감겼어!','풀어줘!','끄악!','만지지마!']},
+  {name:'바다동물',draw:makeAnimalDraw('netanimal'),  w:132, h:96,  msgs:['그물에 갇혔어!','꺼내줘!','도와줘!','으악!']},
+];
+
+/* ===================== SPAWN ===================== */
+function spawnItems() {
+  items = [];
+  const margin = 60, topM = 90;
+  const rnd = (a,b) => a + Math.random()*(b-a);
+
+  // 동물 14마리 전부 화면에 배치
+  ANIMAL_TYPES.forEach(a => {
+    items.push({
+      type:'animal', ...a,
+      x: rnd(margin, W-margin), y: rnd(topM, H-margin),
+      vx: (Math.random()<0.5?1:-1)*(0.5+Math.random()*1.0),
+      vy: (Math.random()-0.5)*0.7,
+      alpha:1, scale:1, dying:false, angle:0,
+      bubble:null, bubbleTimer:0, shaking:0
+    });
+  });
+
+  // 쓰레기는 큐에 담아두고 위에서 순차 낙하
+  trashQueue = [];
+  for (let i = 0; i < totalTrash; i++) {
+    const t = TRASH_TYPES[Math.floor(Math.random() * TRASH_TYPES.length)];
+    const sizeScale = (0.7 + Math.random() * 0.8) * 1.5;
+    trashQueue.push({
+      type:'trash', ...t,
+      w: t.w * sizeScale, h: t.h * sizeScale,
+      vy: 5.5 + Math.random() * 6.5,
+      vx: (Math.random()-0.5) * 0.9,
+      alpha:1, scale:1, dying:false, groundHit:false,
+      angle:(Math.random()-0.5)*0.35,
+      bobOffset: Math.random()*Math.PI*2
+    });
+  }
+  spawnedTrashCount = 0;
+}
+
+function startTrashRain() {
+  stopTrashRain();
+  function dropNext() {
+    if (spawnedTrashCount >= trashQueue.length || gameState !== 'playing') return;
+    const t = trashQueue[spawnedTrashCount];
+    const margin = 50;
+    items.push({
+      ...t,
+      x: margin + Math.random() * (W - margin*2),
+      y: -(t.h/2 + 10)
+    });
+    spawnedTrashCount++;
+    if (spawnedTrashCount < trashQueue.length) {
+      trashSpawnTimer = setTimeout(dropNext, 260 + Math.random() * 220);
+    }
+  }
+  dropNext();
+}
+
+function stopTrashRain() {
+  if (trashSpawnTimer) { clearTimeout(trashSpawnTimer); trashSpawnTimer = null; }
+}
+
+/* ===================== BACKGROUND (bgCanvas에 그림) ===================== */
+function lerpC(c1,c2,t){
+  const r1=parseInt(c1.slice(1,3),16),g1=parseInt(c1.slice(3,5),16),b1=parseInt(c1.slice(5,7),16);
+  const r2=parseInt(c2.slice(1,3),16),g2=parseInt(c2.slice(3,5),16),b2=parseInt(c2.slice(5,7),16);
+  return `rgb(${Math.round(r1+(r2-r1)*t)},${Math.round(g1+(g2-g1)*t)},${Math.round(b1+(b2-b1)*t)})`;
+}
+
+let waveOffset = 0;
+function drawBackground() {
+  const c = bgCtx;
+  const p = cleanProgress;
+  c.clearRect(0,0,W,H);
+
+  // ── 하늘: 더티(흐린 회청) → 클린(청량한 하늘색)
+  const skyG = c.createLinearGradient(0,0,0,H*0.5);
+  skyG.addColorStop(0,   lerpC('#8fa8b8','#a8dcff',p));
+  skyG.addColorStop(0.5, lerpC('#9dbcca','#70c8f5',p));
+  skyG.addColorStop(1,   lerpC('#aac4d0','#4db8f0',p));
+  c.fillStyle = skyG; c.fillRect(0,0,W,H);
+
+  // ── 더티 연무
+  if (p < 0.5) {
+    const hazeA = (0.5-p)*0.28;
+    c.save(); c.globalAlpha = hazeA;
+    c.fillStyle = 'rgba(150,130,100,0.7)';
+    c.fillRect(0,0,W,H*0.52);
+    c.restore();
+  }
+
+  // ── 구름
+  drawClouds(c, p);
+
+  // ── 바다: 더티(탁한 청록) → 클린(청량한 에메랄드)
+  const seaTop = H*0.47;
+  const seaG = c.createLinearGradient(0, seaTop, 0, H);
+  seaG.addColorStop(0,   lerpC('#5a8898','#18c8e8',p));
+  seaG.addColorStop(0.4, lerpC('#4a7888','#08b0d8',p));
+  seaG.addColorStop(1,   lerpC('#3a6070','#0090b8',p));
+  c.fillStyle = seaG; c.fillRect(0, seaTop, W, H);
+
+  // 더티 기름막
+  if (p < 0.4) {
+    const oilA = (0.4-p)*0.35;
+    c.save(); c.globalAlpha = oilA;
+    for (let oi=0;oi<4;oi++){
+      const ox = W*0.12 + oi*W*0.2 + Math.sin(Date.now()*0.001+oi)*15;
+      const oy = seaTop+20+oi*38;
+      const oilG = c.createRadialGradient(ox,oy,0,ox,oy,55+oi*12);
+      oilG.addColorStop(0,'rgba(90,70,30,0.45)');
+      oilG.addColorStop(1,'rgba(0,0,0,0)');
+      c.fillStyle=oilG; c.beginPath(); c.ellipse(ox,oy,70+oi*8,16,0,0,Math.PI*2); c.fill();
+    }
+    c.restore();
+  }
+
+  // ── 파도 (카툰 스타일: 굵고 밝은 흰 물결)
+  waveOffset += 0.5;
+  for (let wi=0;wi<3;wi++){
+    c.strokeStyle = `rgba(255,255,255,${0.28+wi*0.1})`;
+    c.lineWidth = 2.5+wi*0.5;
+    c.beginPath();
+    for (let wx=0;wx<=W;wx+=8){
+      const wy = seaTop+wi*30+Math.sin((wx*0.016)+waveOffset*0.04+wi*1.4)*11;
+      wx===0?c.moveTo(wx,wy):c.lineTo(wx,wy);
+    }
+    c.stroke();
+  }
+
+  // ── 섬
+  const iX=W/2, iY=H*0.6;
+  drawIsland(c, iX, iY, p);
+
+  // ── 경과시간 계산 (부드러운 애니메이션용)
+  const elapsedSec = gameState === 'playing' && gameStartTimestamp > 0
+    ? Math.min(40, (Date.now() - gameStartTimestamp) / 1000)
+    : (gameState === 'result' ? 40 : 0);
+
+  // ── 나무: 24초 이후 시작 (쓰레기 20s 소멸 + 4s 딜레이, tP: 0~1, 24~40초 기준)
+  // tP=0(24s) → 3그루(~29s) → 7그루(~34s) → 섬 꽉차게(40s)
+  const tP = elapsedSec <= 24 ? 0 : Math.min(1, (elapsedSec - 24) / 16);
+
+  // 그룹A — 3그루 (20~22초 fade in)
+  if (tP > 0) {
+    const tA = Math.min(1, tP / 0.10);
+    drawPalmTree(c, iX-80,  iY-85,  tA, 1.80);
+    drawPalmTree(c, iX+65,  iY-65,  tA, 1.60);
+    drawOakTree (c, iX-185, iY-68,  tA, 1.70);
+  }
+  // 그룹B — 4그루 추가, 누적 7그루 (20~23초 fade in)
+  if (tP > 0.333) {
+    const tA = Math.min(1, (tP - 0.333) / 0.10);
+    drawPineTree(c, iX+175, iY-72,  tA, 1.70);
+    drawBushTree(c, iX+10,  iY-115, tA, 2.00);
+    drawPalmTree(c, iX-155, iY-42,  tA, 1.44);
+    drawOakTree (c, iX+98,  iY-122, tA, 1.76);
+  }
+  // 그룹C1 — 5그루 추가 (30~33초 fade in)
+  if (tP > 0.667) {
+    const tA = Math.min(1, (tP - 0.667) / 0.10);
+    drawPalmTree(c, iX-268, iY-48,  tA, 1.44);
+    drawBushTree(c, iX+255, iY-40,  tA, 1.56);
+    drawPineTree(c, iX+38,  iY-58,  tA, 1.46);
+    drawOakTree (c, iX-62,  iY-138, tA, 1.64);
+    drawBushTree(c, iX+188, iY-100, tA, 1.60);
+  }
+  // 그룹C2 — 5그루 추가 (33~36초 fade in)
+  if (tP > 0.767) {
+    const tA = Math.min(1, (tP - 0.767) / 0.10);
+    drawPineTree(c, iX-118, iY-122, tA, 1.56);
+    drawPalmTree(c, iX+212, iY-118, tA, 1.44);
+    drawOakTree (c, iX-222, iY-98,  tA, 1.50);
+    drawBushTree(c, iX+282, iY-22,  tA, 1.40);
+    drawPineTree(c, iX-28,  iY-148, tA, 1.76);
+  }
+  // 그룹C3 — 5그루 추가, 섬 꽉참 (36~40초 fade in)
+  if (tP > 0.867) {
+    const tA = Math.min(1, (tP - 0.867) / 0.10);
+    drawOakTree (c, iX-305, iY-28,  tA, 1.36);
+    drawPineTree(c, iX+235, iY-142, tA, 1.44);
+    drawBushTree(c, iX-138, iY-148, tA, 1.40);
+    drawPalmTree(c, iX+320, iY-55,  tA, 1.38);
+    drawOakTree (c, iX-350, iY-60,  tA, 1.36);
+  }
+
+  // ── 클린 상태: 바다생물
+  if (p > 0.6) {
+    const fA = (p-0.6)/0.4;
+    drawSeaCreature(c, iX-180, H*0.75, fA, 'fish', '#ff7043');
+    drawSeaCreature(c, iX+130, H*0.8, fA, 'fish', '#29b6f6');
+    drawSeaCreature(c, iX-60, H*0.87, fA, 'fish', '#ffca28');
+    if (p > 0.8) drawSeaCreature(c, iX+60, H*0.72, Math.min(1,(p-0.8)/0.2), 'dolphin', '#5c85d6');
+  }
+
+  // ── 섬 위 쓰레기 더미: 7s에 8%, 14s에 20%, 20s에 전부 개별 fade out
+  if (elapsedSec < 20.5) {
+    drawTrashPiles(c, elapsedSec);
+  }
+}
+
+function drawClouds(c, p) {
+  // 카툰 스타일 구름 — 일러스트처럼 크고 흰 납작한 구름
+  const col = lerpC('#a8bec8','#ffffff',p);
+  const alpha = 0.55 + p*0.4;
+
+  // 구름 그리기 헬퍼: bumps 배열로 겹친 원들
+  function cloud(cx, cy, bumps) {
+    c.save();
+    c.fillStyle = col;
+    c.globalAlpha = alpha;
+    c.beginPath();
+    bumps.forEach(b => { c.arc(cx+b[0], cy+b[1], b[2], 0, Math.PI*2); });
+    c.fill();
+    // 살짝 어두운 아랫면 그림자
+    c.globalAlpha = alpha * 0.12;
+    c.fillStyle = '#5580a0';
+    bumps.forEach(b => { c.beginPath(); c.ellipse(cx+b[0], cy+b[1]+b[2]*0.5, b[2]*0.9, b[2]*0.3, 0, 0, Math.PI*2); c.fill(); });
+    c.restore();
+  }
+
+  // 왼쪽 큰 구름 (일러스트: 화면 왼쪽 아래 가장자리)
+  cloud(W*0.04, H*0.18, [
+    [0,0,52],[50,-18,42],[96,-8,34],[140,4,28],[-36,-10,32]
+  ]);
+  // 오른쪽 큰 구름 (일러스트: 화면 오른쪽)
+  cloud(W*0.68, H*0.14, [
+    [0,0,46],[44,-16,38],[84,-5,30],[124,6,24],[-32,-8,28]
+  ]);
+}
+
+function drawIsland(c, iX, iY, p) {
+  // 섬 윤곽 경로 (재사용)
+  function islandPath() {
+    c.beginPath();
+    c.moveTo(iX-360, iY+48);
+    c.bezierCurveTo(iX-390, iY-63, iX-173, iY-203, iX, iY-213);
+    c.bezierCurveTo(iX+173, iY-203, iX+390, iY-63, iX+360, iY+48);
+    c.bezierCurveTo(iX+293, iY+128, iX-293, iY+128, iX-360, iY+48);
+    c.closePath();
+  }
+
+  // 물속 그림자
+  c.save(); c.globalAlpha = 0.18;
+  c.fillStyle = lerpC('#2a5060','#1a6080',p);
+  c.beginPath(); c.ellipse(iX+10, iY+105, 340, 32, 0, 0, Math.PI*2); c.fill();
+  c.restore();
+
+  // 섬 모래 본체 — 일러스트 팔레트: 따뜻한 베이지/탄
+  const sandBase  = lerpC('#b89060','#c8a06a',p);
+  const sandLight = lerpC('#c8a070','#d8b07a',p);
+  c.fillStyle = sandBase;
+  islandPath(); c.fill();
+
+  // 표면 하이라이트 (윗면 밝게)
+  const hlG = c.createRadialGradient(iX-30, iY-60, 15, iX, iY, 230);
+  hlG.addColorStop(0,'rgba(255,240,200,0.38)');
+  hlG.addColorStop(0.55,'rgba(255,240,200,0.1)');
+  hlG.addColorStop(1,'rgba(0,0,0,0)');
+  c.fillStyle = hlG;
+  islandPath(); c.fill();
+
+  // 해안선 테두리 (약간 어두운 모래색)
+  c.strokeStyle = lerpC('#a07848','#b08858',p);
+  c.lineWidth = 3;
+  islandPath(); c.stroke();
+
+  // 풀/잔디 (클린할수록 fade in)
+  if (p > 0.35) {
+    const gA = Math.min(1,(p-0.35)/0.5);
+    c.save(); c.globalAlpha = gA;
+    const grassG = c.createRadialGradient(iX, iY-45, 50, iX, iY, 278);
+    grassG.addColorStop(0,'rgba(60,165,65,0.88)');
+    grassG.addColorStop(0.6,'rgba(46,140,50,0.42)');
+    grassG.addColorStop(1,'rgba(27,100,32,0)');
+    c.fillStyle = grassG;
+    islandPath(); c.fill();
+    if (p > 0.6) {
+      const flowerColors = ['#f48fb1','#fff176','#ef9a9a','#b39ddb'];
+      for (let fi=0;fi<12;fi++){
+        const fx=iX-140+fi*28+Math.sin(fi)*20, fy=iY-50+Math.cos(fi*1.3)*60;
+        c.fillStyle = flowerColors[fi%4]; c.globalAlpha = gA*0.8;
+        c.beginPath(); c.arc(fx,fy,4,0,Math.PI*2); c.fill();
+        c.fillStyle='#ffe082'; c.beginPath(); c.arc(fx,fy,2,0,Math.PI*2); c.fill();
+      }
+    }
+    c.restore();
+  }
+}
+
+function drawTrashPiles(c, elapsedSec) {
+  if (elapsedSec >= 20.5) return;
+  const iX=W/2, iY=H*0.6;
+
+  // 섬 위 쓰레기: 실제 trash 이미지 사용 (TRASH_TYPES와 동일 크기)
+  const pileItems = [
+    {key:'garbage_bag',   dx:-210, dy: -80, angle:-0.20},
+    {key:'bottle_blue',   dx:-130, dy:-140, angle: 0.30},
+    {key:'soda_can',      dx: -20, dy:-165, angle:-0.10},
+    {key:'plastic_bag1',  dx: 110, dy:-130, angle: 0.20},
+    {key:'bottle_green',  dx: 230, dy: -85, angle:-0.30},
+    {key:'box',           dx:-300, dy: -40, angle: 0.15},
+    {key:'bottle_white',  dx: -70, dy: -80, angle: 0.40},
+    {key:'coffee_cup',    dx:  70, dy:-110, angle:-0.20},
+    {key:'tin_can',       dx: 190, dy: -55, angle: 0.10},
+    {key:'banana',        dx:-170, dy:   0, angle:-0.30},
+    {key:'newspaper',     dx:  10, dy: -15, angle: 0.20},
+    {key:'plastic_bag2',  dx: 300, dy: -30, angle:-0.10},
+    {key:'bottle_broken', dx:-310, dy:-100, angle: 0.30},
+    {key:'sausage',       dx: -30, dy:-130, angle:-0.40},
+    {key:'watermelon',    dx: 130, dy: -50, angle: 0.15},
+    {key:'battery',       dx:-240, dy:-130, angle: 0.20},
+    {key:'bulb',          dx:  50, dy:-180, angle:-0.20},
+    {key:'mirror',        dx: 220, dy:-140, angle: 0.25},
+    {key:'paper',         dx: -90, dy:  20, angle:-0.35},
+    {key:'bolt',          dx: 160, dy:  10, angle: 0.10},
+    {key:'container',     dx:-155, dy:-160, angle: 0.15},
+    {key:'coffee_cup',    dx: -50, dy: -60, angle: 0.15},
+    {key:'bottle_blue',   dx:  45, dy:-145, angle:-0.20},
+    {key:'soda_can',      dx:-135, dy: -95, angle: 0.35},
+    {key:'plastic_bag1',  dx: 175, dy:-115, angle:-0.15},
+    {key:'tin_can',       dx:-250, dy: -65, angle: 0.20},
+    {key:'garbage_bag',   dx:  90, dy: -55, angle:-0.10},
+    {key:'bottle_green',  dx: -90, dy:-175, angle: 0.25},
+    {key:'watermelon',    dx: 265, dy: -70, angle:-0.25},
+    {key:'newspaper',     dx:-185, dy:-145, angle: 0.15},
+    {key:'battery',       dx: 145, dy:-165, angle:-0.30},
+    {key:'bolt',          dx:-320, dy: -75, angle: 0.10},
+    {key:'mirror',        dx:   5, dy: -95, angle: 0.20},
+    {key:'bulb',          dx: 315, dy: -65, angle:-0.15},
+    {key:'container',     dx: 100, dy:-175, angle: 0.10},
+    {key:'sausage',       dx:-115, dy: -50, angle: 0.30},
+    {key:'paper',         dx: 220, dy:-100, angle:-0.20},
+    {key:'bottle_white',  dx:-335, dy: -30, angle: 0.15},
+    {key:'box',           dx: 120, dy:   5, angle:-0.10},
+    {key:'plastic_bag2',  dx:-200, dy:-175, angle: 0.25},
+    {key:'banana',        dx:  60, dy: -85, angle: 0.15},
+  ];
+
+  // TRASH_TYPES에서 key별 w/h 빠른 조회
+  const sizeMap = {};
+  TRASH_TYPES.forEach(t => { sizeMap[t.name] = {w:t.w, h:t.h}; });
+  const keyToSize = {
+    garbage_bag:{w:75,h:83},  plastic_bag1:{w:83,h:72},  paper:{w:75,h:63},
+    bottle_blue:{w:93,h:54},  battery:{w:57,h:78},       bottle_green:{w:54,h:93},
+    box:{w:78,h:72},          coffee_cup:{w:63,h:84},    bolt:{w:54,h:78},
+    soda_can:{w:87,h:69},     banana:{w:81,h:60},        sausage:{w:54,h:84},
+    newspaper:{w:81,h:78},    watermelon:{w:84,h:66},    tin_can:{w:57,h:78},
+    mirror:{w:75,h:87},       container:{w:69,h:84},     bulb:{w:66,h:84},
+    bottle_white:{w:60,h:93}, bottle_broken:{w:93,h:57}, plastic_bag2:{w:78,h:75},
+  };
+
+  pileItems.forEach((t, i) => {
+    // 7s에 8%(3개), 14s에 20%(8개), 20s에 전부 사라지도록 fadeStart 분배
+    let fadeStart;
+    if (i < 6) {
+      fadeStart = 5.5 + i * 0.2;               // 0~5: 7s에 15%(6개) 사라짐
+    } else if (i < 16) {
+      fadeStart = 12.0 + (i - 6) * 0.2;        // 6~15: 14s에 누적 40%(16개) 사라짐
+    } else {
+      fadeStart = 14.2 + (i - 16) / 24 * 5.2;  // 16~40: 20s에 전부 분산
+    }
+    const itemAlpha = Math.max(0, 1 - Math.max(0, elapsedSec - fadeStart) / 0.6);
+    if (itemAlpha <= 0) return;
+    const img = trashImgData[t.key];
+    if (!img) return;
+    const sz = keyToSize[t.key] || {w:50,h:50};
+    c.save();
+    c.globalAlpha = itemAlpha * 0.85;
+    c.translate(iX + t.dx, iY + t.dy);
+    c.rotate(t.angle);
+    c.drawImage(img, -sz.w/2, -sz.h/2, sz.w, sz.h);
+    c.restore();
+  });
+}
+
+function drawPalmTree(c, x, y, alpha, scale) {
+  c.save(); c.globalAlpha = alpha; c.translate(x,y); c.scale(scale,scale);
+  // 나무 그림자
+  c.fillStyle = 'rgba(0,0,0,0.15)';
+  c.beginPath(); c.ellipse(8, 72, 20, 8, 0, 0, Math.PI*2); c.fill();
+  // 줄기
+  c.strokeStyle = '#8d6e3a'; c.lineWidth = 10; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(0,70); c.bezierCurveTo(8,45,12,15,0,0); c.stroke();
+  c.lineWidth = 7; c.strokeStyle = '#a1887f';
+  c.beginPath(); c.moveTo(0,70); c.bezierCurveTo(8,45,12,15,0,0); c.stroke();
+  // 줄기 마디
+  c.strokeStyle='rgba(0,0,0,0.15)'; c.lineWidth=1;
+  for(let i=0;i<6;i++){c.beginPath();c.moveTo(-5+i*1,65-i*11);c.lineTo(5+i*1,62-i*11);c.stroke();}
+  // 잎
+  const leafAngles = [0,0.75,1.5,2.25,3.0,3.75,4.5,5.25];
+  leafAngles.forEach((a,i)=>{
+    c.save(); c.rotate(a);
+    const lc1='#2e7d32', lc2='#43a047', lc3='#66bb6a';
+    c.fillStyle = i%3===0?lc1:i%3===1?lc2:lc3;
+    c.beginPath(); c.moveTo(0,0); c.bezierCurveTo(5,-12,25,-40,50,-30); c.bezierCurveTo(30,-12,12,-5,0,0); c.fill();
+    // 잎맥
+    c.strokeStyle='rgba(0,80,0,0.3)'; c.lineWidth=0.8;
+    c.beginPath(); c.moveTo(0,0); c.lineTo(50,-30); c.stroke();
+    c.restore();
+  });
+  // 코코넛
+  c.fillStyle='#5d4037';
+  c.beginPath(); c.arc(-7,7,8,0,Math.PI*2); c.fill();
+  c.beginPath(); c.arc(6,5,7,0,Math.PI*2); c.fill();
+  c.beginPath(); c.arc(0,-4,6,0,Math.PI*2); c.fill();
+  c.restore();
+}
+
+function drawOakTree(c, x, y, alpha, scale) {
+  c.save(); c.globalAlpha = alpha; c.translate(x, y); c.scale(scale, scale);
+  c.fillStyle = 'rgba(0,0,0,0.13)';
+  c.beginPath(); c.ellipse(5, 70, 22, 8, 0, 0, Math.PI*2); c.fill();
+  c.strokeStyle = '#795548'; c.lineWidth = 9; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(0, 68); c.bezierCurveTo(4, 46, 2, 20, 0, 5); c.stroke();
+  c.lineWidth = 6; c.strokeStyle = '#a1887f';
+  c.beginPath(); c.moveTo(0, 68); c.bezierCurveTo(4, 46, 2, 20, 0, 5); c.stroke();
+  const lc = ['#2e7d32','#388e3c','#43a047','#4caf50'];
+  [{dx:-18,dy:-28,r:32},{dx:18,dy:-33,r:30},{dx:0,dy:-53,r:28},{dx:-10,dy:-18,r:25},{dx:12,dy:-16,r:24}]
+    .forEach((b,i)=>{c.fillStyle=lc[i%4];c.beginPath();c.arc(b.dx,b.dy,b.r,0,Math.PI*2);c.fill();});
+  c.restore();
+}
+
+function drawPineTree(c, x, y, alpha, scale) {
+  c.save(); c.globalAlpha = alpha; c.translate(x, y); c.scale(scale, scale);
+  c.fillStyle = 'rgba(0,0,0,0.13)';
+  c.beginPath(); c.ellipse(4, 72, 18, 7, 0, 0, Math.PI*2); c.fill();
+  c.fillStyle = '#6d4c41';
+  c.fillRect(-5, 50, 10, 22);
+  [{y:50,w:52,h:30,col:'#1b5e20'},{y:25,w:40,h:30,col:'#2e7d32'},{y:3,w:28,h:28,col:'#388e3c'}]
+    .forEach(l=>{
+      c.fillStyle=l.col;
+      c.beginPath();c.moveTo(0,l.y-l.h);c.lineTo(-l.w/2,l.y);c.lineTo(l.w/2,l.y);c.closePath();c.fill();
+    });
+  c.restore();
+}
+
+function drawBushTree(c, x, y, alpha, scale) {
+  c.save(); c.globalAlpha = alpha; c.translate(x, y); c.scale(scale, scale);
+  c.fillStyle = 'rgba(0,0,0,0.12)';
+  c.beginPath(); c.ellipse(5, 55, 30, 9, 0, 0, Math.PI*2); c.fill();
+  c.strokeStyle = '#8d6e3a'; c.lineWidth = 7; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(0, 53); c.lineTo(0, 35); c.stroke();
+  const gc = ['#33691e','#558b2f','#689f38','#7cb342'];
+  [{dx:-20,dy:15,r:22},{dx:20,dy:12,r:20},{dx:0,dy:-5,r:24},{dx:-28,dy:5,r:16},{dx:28,dy:3,r:16},{dx:0,dy:20,r:18}]
+    .forEach((b,i)=>{c.fillStyle=gc[i%4];c.beginPath();c.arc(b.dx,b.dy,b.r,0,Math.PI*2);c.fill();});
+  const fc = ['#f48fb1','#fff176','#ff8a65','#ce93d8'];
+  [{dx:-15,dy:5},{dx:15,dy:-5},{dx:0,dy:15},{dx:-25,dy:-2},{dx:22,dy:10}]
+    .forEach((f,i)=>{
+      c.fillStyle=fc[i%4];c.beginPath();c.arc(f.dx,f.dy,4,0,Math.PI*2);c.fill();
+      c.fillStyle='#fff176';c.beginPath();c.arc(f.dx,f.dy,2,0,Math.PI*2);c.fill();
+    });
+  c.restore();
+}
+
+function drawSeaCreature(c, x, y, alpha, type, color) {
+  c.save(); c.globalAlpha = alpha;
+  c.translate(x, y + Math.sin(Date.now()*0.002+x)*5);
+  if (type==='fish'){
+    c.fillStyle = color; c.strokeStyle='rgba(0,0,0,0.2)'; c.lineWidth=1;
+    c.beginPath(); c.ellipse(0,0,18,9,0,0,Math.PI*2); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(-14,0); c.lineTo(-24,-9); c.lineTo(-24,9); c.closePath(); c.fill();
+    c.fillStyle='rgba(255,255,255,0.5)'; c.beginPath(); c.ellipse(-2,-2,6,3,0,0,Math.PI*2); c.fill();
+    c.fillStyle='#1a1a1a'; c.beginPath(); c.arc(12,-1,3,0,Math.PI*2); c.fill();
+    c.fillStyle='#fff'; c.beginPath(); c.arc(13,-2,1,0,Math.PI*2); c.fill();
+  } else if (type==='dolphin'){
+    c.fillStyle=color; c.strokeStyle='rgba(0,0,0,0.2)'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(-30,0); c.bezierCurveTo(-20,-20,20,-20,30,0); c.bezierCurveTo(20,10,-20,10,-30,0); c.fill(); c.stroke();
+    // 지느러미
+    c.beginPath(); c.moveTo(0,-10); c.lineTo(5,-30); c.lineTo(15,-12); c.fill();
+    // 눈
+    c.fillStyle='#1a1a1a'; c.beginPath(); c.arc(22,-3,3,0,Math.PI*2); c.fill();
+    c.fillStyle='#fff'; c.beginPath(); c.arc(23,-4,1,0,Math.PI*2); c.fill();
+    // 미소
+    c.strokeStyle='rgba(255,255,255,0.6)'; c.lineWidth=1.5;
+    c.beginPath(); c.arc(25,2,4,0,Math.PI*0.7); c.stroke();
+  }
+  c.restore();
+}
+
+/* ===================== DRAW ITEMS ===================== */
+function drawItems() {
+  items.forEach(item => {
+    if (item.dying && item.alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = item.alpha;
+    ctx.translate(item.x, item.y);
+    if (item.shaking > 0) {
+      ctx.translate(Math.sin(item.shaking*1.5)*8*(item.shaking/10), 0);
+    }
+    ctx.rotate(item.angle || 0);
+    ctx.scale(item.scale, item.scale);
+    item.draw(ctx, 0, 0, item.w, item.h);
+    ctx.restore();
+
+    // Speech bubble
+    if (item.bubble) {
+      ctx.save();
+      const bx = item.x, by = item.y - item.h/2 - 40;
+      ctx.font = `bold 15px NexonMaplestory,sans-serif`;
+      const tw = ctx.measureText(item.bubble).width;
+      const bw = tw + 24, bh = 32;
+      ctx.fillStyle = '#fff2';
+      ctx.strokeStyle = '#ffa000'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.roundRect(bx-bw/2, by-bh/2, bw, bh, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.roundRect(bx-bw/2+1, by-bh/2+1, bw-2, bh-2, 9); ctx.fill();
+      ctx.fillStyle = '#333'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(item.bubble, bx, by);
+      // Arrow
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#ffa000'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bx-8, by+bh/2); ctx.lineTo(bx, by+bh/2+12); ctx.lineTo(bx+8, by+bh/2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+function drawFingerCursor() {
+  if (fingerPoints.length === 0 || gameState !== 'playing') return;
+  const t = Date.now()*0.005;
+  fingerPoints.forEach(({x, y}) => {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, 28, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(255,235,59,${0.7+0.3*Math.sin(t)})`; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,235,59,${0.6+0.3*Math.sin(t)})`; ctx.fill();
+    for (let i=0;i<4;i++){
+      const a = t + i*Math.PI/2;
+      const r = 38;
+      ctx.beginPath(); ctx.arc(x+Math.cos(a)*r, y+Math.sin(a)*r, 4, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(255,255,100,${0.4+0.3*Math.sin(t+i)})`; ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+function drawScorePopups() {
+  scorePopups = scorePopups.filter(p => p.life > 0);
+  scorePopups.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    const fs = Math.round(20 + p.life*10);
+    ctx.font = `bold ${fs}px NexonMaplestory,sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3;
+    ctx.strokeText(p.text, p.x, p.y);
+    ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, p.y);
+    ctx.restore();
+    p.y -= 2; p.life -= 0.022;
+  });
+}
+
+// 특수 이펙트 파티클 배열
+let burstParticles = [];
+let starParticles = [];
+let flashEffects = [];
+
+// 쓰레기 터치 시 화려한 이펙트 발생
+function spawnTrashEffect(x, y) {
+  // 1) 색종이 폭발 (더 많이)
+  const colors = ['#ffe082','#ff6b35','#43a047','#29b6f6','#e91e63','#ce93d8','#80cbc4','#fff176'];
+  for (let i = 0; i < 18; i++) {
+    const angle = (i/18)*Math.PI*2 + Math.random()*0.5;
+    const speed = 3 + Math.random()*6;
+    confettiParticles.push({
+      x, y,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed - 3,
+      vr: (Math.random()-0.5)*0.4,
+      s: 6+Math.random()*10,
+      r: Math.random()*Math.PI*2,
+      life: 1,
+      color: colors[Math.floor(Math.random()*colors.length)],
+      shape: Math.random()>0.5?'rect':'circle'
+    });
+  }
+  // 2) 별 파티클 (반짝반짝)
+  for (let i = 0; i < 8; i++) {
+    const angle = (i/8)*Math.PI*2;
+    starParticles.push({
+      x, y,
+      vx: Math.cos(angle)*(2+Math.random()*4),
+      vy: Math.sin(angle)*(2+Math.random()*4),
+      life: 1, size: 8+Math.random()*12,
+      color: ['#ffe082','#fff176','#ffffff','#ffcc02'][Math.floor(Math.random()*4)]
+    });
+  }
+  // 3) 빛 번쩍 효과
+  flashEffects.push({x, y, r:0, maxR:80, life:1});
+
+  // 4) 랜덤 응원 텍스트 팝업
+  const msgs = ['✨ 깨끗!','🎉 굿!','💥 없애!','🌟 최고!','👏 짱!','🔥 뿅!'];
+  scorePopups.push({
+    x, y: y-20,
+    text: msgs[Math.floor(Math.random()*msgs.length)],
+    color:'#ffe082', life:1, big:true
+  });
+}
+
+function drawConfetti() {
+  confettiParticles.forEach(p => {
+    ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.r);
+    ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+    if (p.shape === 'circle') {
+      ctx.beginPath(); ctx.arc(0,0,p.s/2,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*0.6);
+    }
+    ctx.restore();
+    p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.r += p.vr; p.life -= 0.022;
+  });
+  confettiParticles = confettiParticles.filter(p => p.life > 0);
+
+  // 별 파티클
+  starParticles.forEach(p => {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    drawStar(ctx, 0, 0, p.size*p.life);
+    ctx.restore();
+    p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= 0.04;
+  });
+  starParticles = starParticles.filter(p => p.life > 0);
+
+  // 빛 번쩍 효과
+  flashEffects.forEach(f => {
+    ctx.save();
+    const fg = ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r);
+    fg.addColorStop(0,`rgba(255,255,200,${f.life*0.6})`);
+    fg.addColorStop(1,'rgba(255,255,100,0)');
+    ctx.fillStyle=fg;
+    ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    f.r += 8; f.life -= 0.08;
+  });
+  flashEffects = flashEffects.filter(f => f.life > 0);
+}
+
+function drawStar(ctx, x, y, size) {
+  ctx.beginPath();
+  for (let i=0;i<5;i++){
+    const angle = (i*4/5)*Math.PI - Math.PI/2;
+    const r = i%2===0 ? size : size*0.4;
+    i===0 ? ctx.moveTo(x+Math.cos(angle)*size,y+Math.sin(angle)*size)
+           : ctx.lineTo(x+Math.cos(angle)*r,y+Math.sin(angle)*r);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function spawnDustEffect(x, y) {
+  const colors = ['#a0866e','#c4a882','#8d7160','#b8956a','#d4b48c','#9e8070'];
+  for (let i = 0; i < 16; i++) {
+    const spread = (Math.random()-0.5) * 2.6;
+    dustParticles.push({
+      x, y,
+      vx: spread * (1 + Math.random()*2.5),
+      vy: -(Math.random()*2.2 + 0.3),
+      alpha: 0.9,
+      r: 3 + Math.random()*5.5,
+      color: colors[Math.floor(Math.random()*colors.length)]
+    });
+  }
+}
+
+function drawDust() {
+  dustParticles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(0.1, p.r * p.alpha), 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.08;
+    p.alpha -= 0.038;
+  });
+  dustParticles = dustParticles.filter(p => p.alpha > 0);
+}
+
+/* ===================== UPDATE ===================== */
+function updateItems() {
+  if (gameState !== 'playing') return;
+  const now = Date.now();
+  items.forEach(item => {
+    if (item.dying) {
+      if (item.groundHit) {
+        item.alpha -= 0.12; // 빠르게 투명해짐 (먼지 이펙트가 대신 표현)
+      } else {
+        item.alpha -= 0.055;
+        item.scale += 0.055;
+      }
+      return;
+    }
+    item.x += item.vx; item.y += item.vy;
+    if (item.type === 'trash') {
+      // 좌우 벽만 바운스, 아래는 바닥 감지
+      if (item.x < 40 || item.x > W-40) { item.vx *= -1; item.x = Math.max(40, Math.min(W-40, item.x)); }
+      if (!item.dying && item.y > H + item.h/2) {
+        item.dying = true; item.groundHit = true;
+        score = Math.max(0, score - 10);
+        document.getElementById('scoreDisplay').textContent = '점수: '+score;
+        scorePopups.push({x:item.x, y:H-50, text:'-10점!', color:'#ff5252', life:1});
+        spawnDustEffect(item.x, H-12);
+        playThudSound();
+      }
+      item.angle = Math.sin(now*0.0015 + item.x*0.01) * 0.15;
+    } else {
+      // 동물: 기존 벽 바운스
+      if (item.x < 60 || item.x > W-60) { item.vx *= -1; item.x = Math.max(60, Math.min(W-60, item.x)); }
+      if (item.y < 90 || item.y > H-60) { item.vy *= -1; item.y = Math.max(90, Math.min(H-60, item.y)); }
+    }
+    if (item.shaking > 0) item.shaking--;
+    if (item.bubbleTimer > 0) { item.bubbleTimer--; if (!item.bubbleTimer) item.bubble = null; }
+
+    // Collision with any tracked finger (both hands)
+    const hitR = (item.w+item.h)/4 + 26;
+    const hitFinger = fingerPoints.find(fp => {
+      const dx = fp.x - item.x, dy = fp.y - item.y;
+      return Math.sqrt(dx*dx+dy*dy) < hitR;
+    });
+    if (hitFinger) {
+      const key = item.name + '_' + Math.round(item.x/20) + '_' + Math.round(item.y/20);
+      if (!lastTouchMap[key] || now-lastTouchMap[key] > 500) {
+        lastTouchMap[key] = now;
+        if (item.type === 'trash' && !item.dying) {
+          item.dying = true;
+          score += 10;
+          removedCount++;
+          cleanProgress = Math.min(1, removedCount/totalTrash);
+          document.getElementById('scoreDisplay').textContent = '점수: '+score;
+          scorePopups.push({x:item.x, y:item.y-30, text:'+10점!', color:'#ffe082', life:1});
+          spawnTrashEffect(item.x, item.y);
+          playPopSound();
+        } else if (item.type === 'animal' && !item.dying) {
+          score = Math.max(0, score - 1);
+          document.getElementById('scoreDisplay').textContent = '점수: '+score;
+          item.bubble = item.msgs[Math.floor(Math.random()*item.msgs.length)];
+          item.bubbleTimer = 100;
+          item.shaking = 14;
+          item.vx = (Math.random()-0.5)*4;
+          item.vy = (Math.random()-0.5)*2;
+          scorePopups.push({x:item.x, y:item.y-30, text:'아니야! 😅', color:'#ff5252', life:1});
+        }
+      }
+    }
+  });
+  items = items.filter(item => !(item.dying && item.alpha <= 0));
+}
+
+/* ===================== RENDER LOOP ===================== */
+function render() {
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+  drawItems();
+  drawFingerCursor();
+  drawScorePopups();
+  drawConfetti();
+  drawDust();
+  drawThanksBubbles();
+  animFrame = requestAnimationFrame(render);
+}
+
+/* ===================== GAME FLOW ===================== */
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('camStatus').style.display = 'block';
+  gameState = 'countdown';
+  // 오디오 시작/재시작 (사용자 제스처 후 실행 필수)
+  if (!audioCtx) {
+    initAudio();
+  } else {
+    if (waveGain) waveGain.gain.setTargetAtTime(0.1, audioCtx.currentTime, 0.5);
+    if (seagullTimer) clearTimeout(seagullTimer);
+    startBGM();
+    scheduleSeagull();
+  }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  render();
+  initCamera();
+  runCountdown(3, () => {
+    gameState = 'playing';
+    score = 0; removedCount = 0; cleanProgress = 0; gameStartTimestamp = Date.now();
+    lastTouchMap = {};
+    scorePopups = []; confettiParticles = []; dustParticles = [];
+    spawnItems();
+    startTrashRain();
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('scoreDisplay').textContent = '점수: 0';
+    timeLeft = 40;
+    updateTimerDisplay();
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      updateTimerDisplay();
+      if (timeLeft <= 0) { clearInterval(timerInterval); endGame(); }
+    }, 1000);
+  });
+}
+
+function updateTimerDisplay() {
+  const td = document.getElementById('timerDisplay');
+  td.textContent = '⏰ ' + timeLeft;
+  if (timeLeft <= 10) td.classList.add('urgent');
+  else td.classList.remove('urgent');
+}
+
+function runCountdown(n, cb) {
+  const overlay = document.getElementById('countdownOverlay');
+  const numEl = document.getElementById('countdownNum');
+  overlay.style.display = 'flex';
+  numEl.textContent = n > 0 ? n : '시작!';
+  numEl.className = 'countdown-num cd-anim';
+  void numEl.offsetWidth; numEl.className = 'countdown-num cd-anim';
+  if (n > 0) setTimeout(() => runCountdown(n-1, cb), 900);
+  else setTimeout(() => { overlay.style.display = 'none'; cb(); }, 750);
+}
+
+function endGame() {
+  gameState = 'result';
+  stopTrashRain();
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('camStatus').style.display = 'none';
+  stopAudio();
+
+  const pct = removedCount / totalTrash;
+
+  // 성공도에 따라 cleanProgress 최종 반영 (배경 변화)
+  cleanProgress = Math.min(1, pct * 1.2);
+
+  // 파티클 폭발
+  if (removedCount >= 60) {
+    const burst = removedCount >= 80 ? 120 : 60;
+    for (let ci=0;ci<burst;ci++){
+      confettiParticles.push({
+        x:W/2+(Math.random()-0.5)*W, y:-20,
+        vx:(Math.random()-0.5)*10, vy:Math.random()*4+1,
+        vr:(Math.random()-0.5)*0.4, s:10+Math.random()*12,
+        r:Math.random()*Math.PI*2, life:1,
+        shape: Math.random()>0.5?'rect':'circle',
+        color:['#ffe082','#ff6b35','#43a047','#29b6f6','#e91e63','#ce93d8','#80cbc4'][Math.floor(Math.random()*7)]
+      });
+    }
+  }
+
+  const resultScreen = document.getElementById('resultScreen');
+  resultScreen.style.display = 'flex';
+  document.getElementById('resultScore').textContent = score+'점';
+  document.getElementById('resultDetail').textContent = `쓰레기 ${removedCount}개 치우기 성공~`;
+
+  let stars, msg, title;
+  // 4단계: 80개+, 3단계: 60개+, 2단계: 40개+, 1단계: 나머지
+  if (removedCount >= 80) {
+    stars = '⭐⭐⭐';
+    title = '🎉 섬이 깨끗해졌어요!';
+    msg = '🌊 바다가 맑아졌어요!\n🐠 고마워요! 덕분에 살았어요!\n🐬 우리 바다로 다시 돌아올게요!\n🌴 섬이 아름다워졌어요!';
+  } else if (removedCount >= 60) {
+    stars = '⭐⭐';
+    title = '👏 잘했어요!';
+    msg = '🦭 조금 더 치워주세요!\n🐟 많이 깨끗해졌어요, 고마워!\n🌊 바다가 조금씩 맑아지고 있어요!';
+  } else if (removedCount >= 40) {
+    stars = '⭐';
+    title = '💪 도전!';
+    msg = '🦀 좀 더 빨리 치워줄 수 있죠?\n🐦 다시 한 번 해봐요!\n💪 파이팅!';
+  } else {
+    stars = '💧';
+    title = '⏰ 시간 종료!';
+    msg = '😊 처음이라 어렵죠?\n🌊 바다를 구해줘요!\n다시 도전해봐요!';
+  }
+
+  document.getElementById('starsRow').textContent = stars;
+  document.getElementById('resultMsg').textContent = msg;
+  document.getElementById('resultTitle').textContent = title;
+
+  // 바다생물 감사 말풍선 (성공도 높을수록 더 많이)
+  if (removedCount >= 40) {
+    showSeaCreatureThanks(removedCount / totalTrash);
+  }
+
+}
+
+// 바다생물 감사 말풍선 캔버스에 그리기
+let thanksBubbles = [];
+function showSeaCreatureThanks(pct) {
+  const allCreatures = [
+    {emoji:'🐠', name:'물고기', msgs:['고마워요! 🎵','살았어요!','바다가 깨끗해!'], x:W*0.12, y:H*0.48, color:'#ff7043'},
+    {emoji:'🦭', name:'바다표범', msgs:['정말 고마워!','냄새가 없어졌어!','살겠다~!'], x:W*0.82, y:H*0.42, color:'#8d6e63'},
+    {emoji:'🐬', name:'돌고래', msgs:['고마워요!🎶','바다가 맑아졌어!','같이 놀자!'], x:W*0.5, y:H*0.37, color:'#5c85d6'},
+    {emoji:'🦀', name:'꽃게', msgs:['이제 살 것 같아!','고마워 친구!','집이 깨끗해!'], x:W*0.18, y:H*0.78, color:'#e53935'},
+    {emoji:'🐡', name:'복어', msgs:['감사합니다!','뿌우~ 고마워!','행복해요!'], x:W*0.78, y:H*0.75, color:'#29b6f6'},
+  ];
+  const count = pct >= 80/180 ? 5 : pct >= 60/180 ? 3 : 2;
+  thanksBubbles = allCreatures.slice(0, count).map((c, i) => ({
+    ...c,
+    msg: c.msgs[Math.floor(Math.random() * c.msgs.length)],
+    alpha: 0,
+    delay: i * 500,
+    born: Date.now(),
+    bobOffset: Math.random() * Math.PI * 2,
+    scaleAnim: 0,  // 등장 스케일 애니
+  }));
+}
+
+function drawThanksBubbles() {
+  if (gameState !== 'result' || thanksBubbles.length === 0) return;
+  const now = Date.now();
+  thanksBubbles.forEach(b => {
+    const elapsed = now - b.born - b.delay;
+    if (elapsed < 0) return;
+    // 등장 애니메이션 (통통 튀며 나타남)
+    b.alpha = Math.min(1, elapsed / 400);
+    b.scaleAnim = b.alpha < 1
+      ? 0.5 + b.alpha * 0.7 + Math.sin(elapsed * 0.02) * 0.1
+      : 1.0 + Math.sin(elapsed * 0.004) * 0.05;  // 살아있는 느낌
+
+    const floatY = b.y + Math.sin(now * 0.002 + b.bobOffset) * 10;
+    const s = b.scaleAnim;
+
+    ctx.save();
+    ctx.translate(b.x, floatY);
+    ctx.scale(s, s);
+    ctx.globalAlpha = b.alpha;
+
+    // 이모지 (크게)
+    ctx.font = '52px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(b.emoji, 0, 0);
+
+    // 말풍선 배경
+    ctx.font = `bold 15px NexonMaplestory,sans-serif`;
+    const tw = ctx.measureText(b.msg).width;
+    const bw = tw + 24, bh = 32;
+    const bx = -bw / 2, by = -58;
+
+    // 말풍선 그림자
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath(); ctx.roundRect(bx+3, by+3, bw, bh, 12); ctx.fill();
+
+    // 말풍선 배경
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 12); ctx.fill(); ctx.stroke();
+
+    // 하트/별 장식
+    ctx.font = '11px serif';
+    ctx.fillText('💕', bx - 10, by + 6);
+
+    // 말풍선 텍스트
+    ctx.fillStyle = '#333';
+    ctx.font = `bold 15px NexonMaplestory,sans-serif`;
+    ctx.fillText(b.msg, 0, by + bh / 2);
+
+    // 말풍선 꼬리
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-8, by + bh);
+    ctx.lineTo(0, by + bh + 12);
+    ctx.lineTo(8, by + bh);
+    ctx.fill(); ctx.stroke();
+
+    ctx.restore();
+  });
+}
+
+function goHome() {
+  document.getElementById('resultScreen').style.display = 'none';
+  document.getElementById('startScreen').style.display = 'flex';
+  cancelAnimationFrame(animFrame); animFrame = null;
+  items = []; scorePopups = []; confettiParticles = []; dustParticles = [];
+  starParticles = []; flashEffects = []; thanksBubbles = [];
+  stopTrashRain(); trashQueue = [];
+  fingerPoints = [];
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  gameState = 'start'; cleanProgress = 0; gameStartTimestamp = 0;
+  ctx.clearRect(0,0,W,H);
+}
+
+/* ===================== CAMERA / INPUT ===================== */
+
+// offscreen canvas 2개 - 매 프레임 재사용
+const offscreenCanvas = document.createElement('canvas');
+const offscreenCtx = offscreenCanvas.getContext('2d');
+// 엣지 부드럽게 처리용 blur canvas
+const blurCanvas = document.createElement('canvas');
+const blurCtx = blurCanvas.getContext('2d');
+
+function initCamera() {
+  const video = document.getElementById('camView');
+  const status = document.getElementById('camStatus');
+
+  // 해상도 높임: 1280x720 → 실제 카메라 최대 해상도 요청
+  navigator.mediaDevices.getUserMedia({
+    video:{
+      facingMode:'user',
+      width:{ideal:1920, min:1280},
+      height:{ideal:1080, min:720},
+      frameRate:{ideal:60, min:30}  // 프레임레이트 높임 → 움직임 추적 향상
+    }
+  })
+    .then(stream => {
+      video.srcObject = stream;
+      video.play();
+      status.textContent = '🤖 카메라 준비 중...';
+
+      const hasSelfie = typeof SelfieSegmentation !== 'undefined';
+      const hasHands  = typeof Hands !== 'undefined';
+      const hasCam    = typeof Camera !== 'undefined';
+
+      // ── Selfie Segmentation ──
+      let seg = null;
+      if (hasSelfie) {
+        seg = new SelfieSegmentation({
+          locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`
+        });
+        // modelSelection: 0=general(빠름), 1=landscape(정확)
+        // 움직임 추적 개선: general 모델이 실제로 더 빠르게 반응함
+        seg.setOptions({modelSelection: 0});
+        seg.onResults(onSegResults);
+      }
+
+      // ── Hands ──
+      let hands = null;
+      if (hasHands) {
+        hands = new Hands({
+          locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${f}`
+        });
+        // modelComplexity 0 = 빠른 추적, 움직임 잘 따라옴
+        hands.setOptions({maxNumHands:4, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5});
+        hands.onResults(onHandResults);
+      } else {
+        setupFallback();
+      }
+
+      // ── 카메라 루프 시작 (해상도 높임) ──
+      if (hasCam && (seg || hands)) {
+        const cam = new Camera(video, {
+          onFrame: async () => {
+            if (seg)   await seg.send({image: video});
+            if (hands) await hands.send({image: video});
+          },
+          width: 1280, height: 720   // 처리 해상도 높임
+        });
+        cam.start();
+        setTimeout(() => { if(status) status.style.display = 'none'; }, 5000);
+      } else {
+        video.addEventListener('loadeddata', () => {
+          async function loop() {
+            if (seg)   await seg.send({image: video});
+            if (hands) await hands.send({image: video});
+            requestAnimationFrame(loop);
+          }
+          loop();
+        });
+        setupFallback();
+      }
+    })
+    .catch(() => {
+      status.textContent = '🖱️ 마우스/터치로 플레이';
+      setTimeout(() => { status.style.display = 'none'; }, 2000);
+      setupFallback();
+    });
+}
+
+// Segmentation 결과 처리 - 사람만 segCanvas에 그리기 (거울모드 + 엣지 개선)
+function onSegResults(results) {
+  const sw = segCanvas.width, sh = segCanvas.height;
+
+  // offscreen 크기 맞추기
+  if (offscreenCanvas.width !== sw || offscreenCanvas.height !== sh) {
+    offscreenCanvas.width = sw;
+    offscreenCanvas.height = sh;
+    blurCanvas.width = sw;
+    blurCanvas.height = sh;
+  }
+
+  // ── Step 1: 마스크를 blur canvas에 좌우반전으로 그리기 (엣지 소프트닝)
+  blurCtx.clearRect(0, 0, sw, sh);
+  blurCtx.save();
+  blurCtx.filter = 'blur(6px)';  // 마스크 엣지를 부드럽게
+  blurCtx.scale(-1, 1);
+  blurCtx.drawImage(results.segmentationMask, -sw, 0, sw, sh);
+  blurCtx.restore();
+  blurCtx.filter = 'none';
+
+  // ── Step 2: offscreen에 원본 카메라 영상 좌우반전으로 그리기
+  offscreenCtx.clearRect(0, 0, sw, sh);
+  offscreenCtx.save();
+  offscreenCtx.scale(-1, 1);
+  offscreenCtx.drawImage(results.image, -sw, 0, sw, sh);
+  offscreenCtx.restore();
+
+  // ── Step 3: 블러 처리된 마스크로 사람 영역만 남기기
+  offscreenCtx.globalCompositeOperation = 'destination-in';
+  offscreenCtx.drawImage(blurCanvas, 0, 0);
+  offscreenCtx.globalCompositeOperation = 'source-over';
+
+  // ── Step 4: segCanvas에 결과 그리기
+  segCtx.clearRect(0, 0, sw, sh);
+  segCtx.drawImage(offscreenCanvas, 0, 0, sw, sh);
+
+  // 상태 표시 숨기기
+  const status = document.getElementById('camStatus');
+  if (status && status.style.display !== 'none') {
+    status.textContent = '✅ 크로마키 적용 중!';
+    setTimeout(() => { status.style.display = 'none'; }, 1500);
+  }
+}
+
+// Hands 결과 처리
+function onHandResults(results) {
+  fingerPoints = [];
+  if (results.multiHandLandmarks) {
+    results.multiHandLandmarks.forEach(hand => {
+      [4, 8, 12, 16, 20].forEach(idx => { // 엄지~소지 끝 5개
+        const lm = hand[idx];
+        fingerPoints.push({ x: (1 - lm.x) * W, y: lm.y * H });
+      });
+    });
+  }
+}
+
+function setupFallback() {
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    fingerPoints = [{ x: (e.clientX-r.left)*(W/r.width), y: (e.clientY-r.top)*(H/r.height) }];
+  });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    fingerPoints = Array.from(e.touches).map(t => ({
+      x: (t.clientX-r.left)*(W/r.width),
+      y: (t.clientY-r.top)*(H/r.height)
+    }));
+  },{passive:false});
+  canvas.addEventListener('mouseleave', () => { fingerPoints = []; });
+}
+
+// Update loop separate from render
+setInterval(updateItems, 1000/60);
+</script>
+</body>
+</html>
